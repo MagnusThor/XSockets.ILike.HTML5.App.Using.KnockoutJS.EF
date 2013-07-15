@@ -1,6 +1,6 @@
-# XSockets.ILike.HTML5.App.Using.KnockoutJS.EF
+## XSockets.ILike.HTML5.App.Using.KnockoutJS.EF
 
-## About
+### About
 
 This repo contains the example code related to the following blogpost.
 

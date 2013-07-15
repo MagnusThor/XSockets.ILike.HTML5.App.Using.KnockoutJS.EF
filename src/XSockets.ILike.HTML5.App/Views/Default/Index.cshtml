@@ -43,7 +43,6 @@
                 this.Caption = data.Caption;
                 this.Description = data.Description;
                 this.Likes = ko.observableArray(ko.utils.arrayMap(data.Likes, function (like) {
-                    console.log(new likeModel(like));
                     return new likeModel(like);
                 }));;
             }

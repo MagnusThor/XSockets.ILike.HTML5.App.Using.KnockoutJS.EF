@@ -1,0 +1,136 @@
+﻿<html>
+<head>
+    <title>Vote for a thing..</title>
+</head>
+<body>
+    <div>
+        <fieldset data-bind="with: thing">
+            <legend>Wanna create a thing to like?</legend>
+            <input type="text" name="caption" id="caption" placeholder="Give the thing a caption!" data-bind="value: Caption, valueUpdate: 'afterkeydown'" />
+            <textarea name="description" id="description" placeholder="Describe what to like..." data-bind="value: Description, valueUpdate: 'afterkeydown'"></textarea>
+            <button id="createThing"
+                data-bind="click: saveOrUpdate">
+                Create!</button>
+        </fieldset>
+    </div>
+    <div>
+        <h3>Things to like?</h3>
+        <ul id="things" data-bind="foreach: things">
+            <li>
+                <a data-bind="click: like">
+                    <span data-bind="text: Caption"></span>&nbsp;
+                (<mark data-bind="text: Likes().length"></mark>)
+
+                </a>
+                <p data-bind="text: Description"></p>
+            </li>
+        </ul>
+    </div>
+
+
+    <script src="~/Scripts/jquery-1.9.1.js"></script>
+    <script src="~/Scripts/jXSockets.2.3.min.js"></script>
+    <script src="~/Scripts/knockout-2.3.0.debug.js"></script>
+    <script>
+
+        var ws;
+        var vm;
+
+        // model that represents our "things"
+        var thingModel = (function () {
+            function thingModel(data) {
+                this.Id = data.Id;
+                this.Caption = data.Caption;
+                this.Description = data.Description;
+                this.Likes = ko.observableArray(ko.utils.arrayMap(data.Likes, function (like) {
+                    console.log(new likeModel(like));
+                    return new likeModel(like);
+                }));;
+            }
+            return thingModel;
+        })();
+
+        // model that represents our Likes
+        var likeModel = (function () {
+            function likeModel(data) {
+                this.Id = data.Id;
+                this.Score = data.Score;
+                this.Created = data.Created;
+            }
+            return likeModel;
+        })();
+
+        // model that represents our app(view) in general 
+        var appViewModel = (function () {
+            function appViewModel() {
+                this.things = ko.observableArray();
+                this.thing = ko.observable(new thingModel({}));
+            }
+            appViewModel.prototype.findById = function (obj) {
+                var match = ko.utils.arrayFirst(this.things(), function (item) {
+
+                    return item.Id === obj.Id;
+                });
+                if (!match)
+                    return undefined;
+                else
+                    return match;
+            };
+            appViewModel.prototype.delegate = function (obj, topic, cb) {
+                obj.prototype[topic] = cb;
+            };
+            return appViewModel;
+        })();
+
+
+        $(function () {
+
+            // Create a new Connection to our Realtime controller
+            ws = new XSockets.WebSocket("ws://127.0.0.1:4502/RealtimeController", "Realtimecontroller");
+
+            ws.subscribe(XSockets.Events.open, function (connection) {
+                ws.trigger("Things"); // Get all the "things"
+            });
+
+            // Create a new instance of our application viewmodel
+            vm = new appViewModel();
+
+
+            // attach a delagate for the "action" -> saveOrUpdate on our thingModel,
+            vm.delegate(thingModel, "saveOrUpdate", function (model, event) {
+                // Send a mesasge to the server using the topic, ThingSaveOrUpdate. We pass the model as a JSON literal
+                ws.publish("ThingSaveOrUpdate", ko.toJS(model)); // Note, we are passing the complete model as XSockets.NET supports modelbinding (serverside)
+            });
+
+            // attach a delegate for the "action" -> like on our thingModel,
+            vm.delegate(thingModel, "like", function (model, event) {
+                // Send a message and add a like to the 'thing'
+                ws.publish("AddLikeToThing", { thingId: model.Id, score: 5 });
+            });
+
+            // Lets listen for inbound messages with the topic of 'ThingSaveOrUpdate' 
+            ws.subscribe("ThingSaveOrUpdate", function (t) {
+                vm.things.push(new thingModel(t)); // Add the thing as a thingModel to our observable array
+            });
+
+            // Someone liked a thing, find the thuing, and replace
+            ws.subscribe("Liked", function (l) {
+                vm.things.replace(vm.findById(l), new thingModel(l));
+            });
+
+            // Listen to all things , this will anly fire once ( after connect , as we below trigger Things )
+            ws.subscribe("Things", function (allThings) {
+                allThings.forEach(function (a, b) {
+                    vm.things.push(new thingModel(a));
+                });
+            });
+
+            ko.applyBindings(vm);
+
+        });
+
+    </script>
+
+</body>
+
+</html>
